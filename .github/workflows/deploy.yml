@@ -35,6 +35,8 @@ jobs:
           fi
 
       - name: Build production PWA
+        env:
+          VITE_BASE: /Player-Musical/
         run: npm run build
 
       - name: Setup Pages
