@@ -1,12 +1,14 @@
 import React, { useState } from 'react';
-import { Compass, Library } from 'lucide-react';
+import { Compass, Library, ListMusic } from 'lucide-react';
 import { PlayerProvider, usePlayer } from './context/PlayerContext';
 import { MiniPlayer } from './components/MiniPlayer';
 import { PlayerModal } from './components/PlayerModal';
+import { TourOverlay } from './components/TourOverlay';
 import { LibraryScreen } from './screens/LibraryScreen';
+import { PlaylistsScreen } from './screens/PlaylistsScreen';
 import { ExploreScreen } from './screens/ExploreScreen';
 
-type AppTab = 'library' | 'explore';
+type AppTab = 'library' | 'playlists' | 'explore';
 
 const AppShell: React.FC = () => {
   const { toast } = usePlayer();
@@ -20,7 +22,11 @@ const AppShell: React.FC = () => {
         </div>
       )}
 
-      {activeTab === 'library' ? <LibraryScreen /> : <ExploreScreen />}
+      {activeTab === 'library' && (
+        <LibraryScreen onNavigateExplore={() => setActiveTab('explore')} />
+      )}
+      {activeTab === 'playlists' && <PlaylistsScreen />}
+      {activeTab === 'explore' && <ExploreScreen />}
 
       <MiniPlayer />
 
@@ -30,8 +36,17 @@ const AppShell: React.FC = () => {
           className={`nav-item ${activeTab === 'library' ? 'active' : ''}`}
           onClick={() => setActiveTab('library')}
         >
-          <Library size={21} />
+          <Library size={20} />
           <span>Biblioteca</span>
+        </button>
+
+        <button
+          type="button"
+          className={`nav-item ${activeTab === 'playlists' ? 'active' : ''}`}
+          onClick={() => setActiveTab('playlists')}
+        >
+          <ListMusic size={20} />
+          <span>Playlists</span>
         </button>
 
         <button
@@ -39,12 +54,13 @@ const AppShell: React.FC = () => {
           className={`nav-item ${activeTab === 'explore' ? 'active' : ''}`}
           onClick={() => setActiveTab('explore')}
         >
-          <Compass size={21} />
+          <Compass size={20} />
           <span>Explorar</span>
         </button>
       </nav>
 
       <PlayerModal />
+      <TourOverlay />
     </div>
   );
 };

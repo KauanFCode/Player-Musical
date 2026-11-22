@@ -6,6 +6,7 @@ import {
   FileAudio,
   HardDrive,
   Smartphone,
+  Sparkles,
 } from 'lucide-react';
 import { usePlayer } from '../context/PlayerContext';
 
@@ -65,55 +66,85 @@ export const HelpModal: React.FC<HelpModalProps> = ({ visible, onClose }) => {
 
         <div className="settings-card" style={{ marginBottom: 12 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 8 }}>
+            <FileAudio size={19} color="var(--primary)" />
+            <div className="setting-title">Importando Pastas &amp; Músicas Locais</div>
+          </div>
+          <div className="setting-desc" style={{ lineHeight: 1.6, fontSize: 13 }}>
+            Use <strong style={{ color: 'var(--primary)' }}>Selecionar Pasta</strong> na tela
+            inicial ou em <strong>Configurações ⚙</strong> para importar pastas inteiras com
+            capas (<code>cover.jpg</code> / ID3) e letras (<code>.lrc</code>). Você também pode
+            arrastar músicas direto para o app!
+          </div>
+        </div>
+
+        <div className="settings-card" style={{ marginBottom: 12 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 8 }}>
+            <AlignLeft size={19} color="var(--primary)" />
+            <div className="setting-title">Letras Sincronizadas &amp; Tradução PT-BR</div>
+          </div>
+          <div className="setting-desc" style={{ lineHeight: 1.6, fontSize: 13 }}>
+            As letras aparecem centralizadas no meio da tela. Toque em qualquer verso para pular
+            para aquele trecho, ajuste a sincronia em <code>-0.5s / +0.5s</code> ou toque em{' '}
+            <strong style={{ color: 'var(--primary)' }}>Traduzir</strong> para ver a tradução em
+            português em tempo real!
+          </div>
+        </div>
+
+        <div className="settings-card" style={{ marginBottom: 12 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 8 }}>
+            <Sparkles size={19} color="var(--primary)" />
+            <div className="setting-title">Playlists, Fila &amp; Explorar</div>
+          </div>
+          <div className="setting-desc" style={{ lineHeight: 1.6, fontSize: 13 }}>
+            Gerencie playlists e suas Favoritas na aba{' '}
+            <strong style={{ color: 'var(--primary)' }}>Playlists</strong>, pesquise e baixe músicas
+            online na aba <strong style={{ color: 'var(--primary)' }}>Explorar</strong> e puxe
+            capas faltantes de forma discreta em Configurações.
+          </div>
+        </div>
+
+        <div className="settings-card" style={{ marginBottom: 12 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 8 }}>
             <Smartphone size={19} color="var(--primary)" />
-            <div className="setting-title">Como Instalar pelo Navegador</div>
+            <div className="setting-title">App Android Nativo (.APK)</div>
+          </div>
+          <div className="setting-desc" style={{ lineHeight: 1.6, fontSize: 13, marginBottom: 12 }}>
+            Prefere instalar direto como aplicativo Android nativo com leitura de pastas em segundo
+            plano? Baixe o APK oficial da versão <strong style={{ color: 'var(--primary)' }}>2.0.7</strong>:
+          </div>
+          <a
+            href="./Player-v2.0.7.apk"
+            download="Player-v2.0.7.apk"
+            className="pill-primary-btn"
+            style={{ width: '100%', textDecoration: 'none' }}
+          >
+            <Download size={16} />
+            Baixar APK Android (v2.0.7)
+          </a>
+        </div>
+
+        <div className="settings-card" style={{ marginBottom: 12 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 8 }}>
+            <Smartphone size={19} color="var(--primary)" />
+            <div className="setting-title">Como Instalar o PWA pelo Navegador</div>
           </div>
           <div className="setting-desc" style={{ lineHeight: 1.6, fontSize: 13 }}>
             <strong style={{ color: 'var(--text)' }}>Android (Chrome / Edge):</strong>{' '}
-            Toque no menu <strong>⋮</strong> (três pontinhos) →{' '}
-            <strong style={{ color: 'var(--primary)' }}>Instalar aplicativo</strong> ou{' '}
-            <strong style={{ color: 'var(--primary)' }}>Adicionar à tela inicial</strong>.
+            Menu <strong>⋮</strong> → <strong style={{ color: 'var(--primary)' }}>Instalar aplicativo</strong>.
             <br />
             <strong style={{ color: 'var(--text)' }}>iPhone / iPad (Safari):</strong>{' '}
-            Toque em <strong>Compartilhar</strong> (ícone da seta para cima) →{' '}
-            <strong style={{ color: 'var(--primary)' }}>Adicionar à Tela de Início</strong>.
-          </div>
-        </div>
-
-        <div className="settings-card" style={{ marginBottom: 12 }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 8 }}>
-            <HardDrive size={19} color="var(--primary)" />
-            <div className="setting-title">100% Offline (IndexedDB + Service Worker)</div>
-          </div>
-          <div className="setting-desc" style={{ lineHeight: 1.6, fontSize: 13 }}>
-            Após abrir o app uma vez, toda a interface fica salva no cache do navegador e
-            abre mesmo em Modo Avião. As músicas importadas e baixadas ficam armazenadas
-            localmente no IndexedDB do seu dispositivo.
-          </div>
-        </div>
-
-        <div className="settings-card" style={{ marginBottom: 12 }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 8 }}>
-            <FileAudio size={19} color="var(--primary)" />
-            <div className="setting-title">Importando Músicas Locais</div>
-          </div>
-          <div className="setting-desc" style={{ lineHeight: 1.6, fontSize: 13 }}>
-            Toque em <strong>Arquivos</strong> e selecione seus arquivos{' '}
-            <code>.mp3</code>, <code>.m4a</code>, <code>.wav</code>, <code>.flac</code> ou{' '}
-            <code>.ogg</code> (junto com <code>.lrc</code> e capa se quiser). O app lê
-            automaticamente tags ID3v2 e capa embutida, ou usa o padrão{' '}
-            <strong style={{ color: 'var(--primary)' }}>Artista - Música.mp3</strong>.
+            <strong>Compartilhar</strong> → <strong style={{ color: 'var(--primary)' }}>Adicionar à Tela de Início</strong>.
           </div>
         </div>
 
         <div className="settings-card">
           <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 8 }}>
-            <AlignLeft size={19} color="var(--primary)" />
-            <div className="setting-title">Letras Sincronizadas (.lrc)</div>
+            <HardDrive size={19} color="var(--primary)" />
+            <div className="setting-title">100% Offline (IndexedDB + Service Worker)</div>
           </div>
           <div className="setting-desc" style={{ lineHeight: 1.6, fontSize: 13 }}>
-            Toque em qualquer linha da letra no player para pular diretamente para aquele
-            momento da música!
+            Toda a interface e suas músicas importadas ou baixadas permanecem salvas no dispositivo
+            para tocar mesmo sem internet.
           </div>
         </div>
       </div>

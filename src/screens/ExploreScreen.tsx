@@ -4,9 +4,12 @@ import {
   Download,
   Flame,
   Loader2,
+  Music,
   Play,
   RefreshCw,
+  Search,
   WifiOff,
+  X,
 } from 'lucide-react';
 import { usePlayer } from '../context/PlayerContext';
 import { formatTime } from '../utils/lrcParser';
@@ -26,15 +29,19 @@ export const ExploreScreen: React.FC = () => {
     isOnline,
     libraryTracks,
     fetchTrendingTracks,
+    searchOnlineTracks,
     streamOnlineTrack,
     downloadOnlineTrack,
     showToast,
   } = usePlayer();
 
   const [selectedGenre, setSelectedGenre] = useState('');
+  const [searchInput, setSearchInput] = useState('');
+  const [activeSearchQuery, setActiveSearchQuery] = useState('');
   const [tracks, setTracks] = useState<OnlineTrack[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [downloadingId, setDownloadingId] = useState<string | null>(null);
+  const [brokenArtIds, setBrokenArtIds] = useState<Record<string, boolean>>({});
 
   const loadTrending = useCallback(
     async (genre: string) => {
@@ -53,9 +60,51 @@ export const ExploreScreen: React.FC = () => {
     [fetchTrendingTracks]
   );
 
+  const runSearch = useCallback(
+    async (query: string) => {
+      const clean = query.trim();
+      if (!clean) {
+        setActiveSearchQuery('');
+        await loadTrending(selectedGenre);
+        return;
+      }
+      if (!navigator.onLine) {
+        showToast('Você está offline.', 'error');
+        return;
+      }
+      setActiveSearchQuery(clean);
+      setIsLoading(true);
+      try {
+        const data = await searchOnlineTracks(clean);
+        setTracks(data);
+      } finally {
+        setIsLoading(false);
+      }
+    },
+    [loadTrending, searchOnlineTracks, selectedGenre, showToast]
+  );
+
   useEffect(() => {
-    loadTrending(selectedGenre);
-  }, [selectedGenre, loadTrending]);
+    if (!activeSearchQuery) {
+      loadTrending(selectedGenre);
+    }
+  }, [selectedGenre, activeSearchQuery, loadTrending]);
+
+  const handleSelectGenre = (value: string) => {
+    setSearchInput('');
+    setActiveSearchQuery('');
+    if (value === selectedGenre) {
+      void loadTrending(value);
+    } else {
+      setSelectedGenre(value);
+    }
+  };
+
+  const handleClearSearch = () => {
+    setSearchInput('');
+    setActiveSearchQuery('');
+    void loadTrending(selectedGenre);
+  };
 
   const handleDownload = async (item: OnlineTrack) => {
     if (!isOnline) {
@@ -76,64 +125,109 @@ export const ExploreScreen: React.FC = () => {
   return (
     <div className="screen-scroll">
       <header className="screen-header">
-        <div className="screen-title-wrap">
-          <Flame size={24} color="var(--primary)" />
+        <div>
+          <div className="screen-eyebrow">DESCOBRIR ONLINE</div>
           <h1 className="screen-title">Explorar</h1>
         </div>
         <button
           type="button"
           className="icon-btn"
           aria-label="Atualizar lista"
-          onClick={() => loadTrending(selectedGenre)}
+          onClick={() =>
+            activeSearchQuery ? runSearch(activeSearchQuery) : loadTrending(selectedGenre)
+          }
         >
           <RefreshCw size={19} />
         </button>
       </header>
 
-      <div className="genre-scroll">
-        {GENRES.map((g) => (
-          <button
-            key={g.label}
-            type="button"
-            className={`genre-chip ${selectedGenre === g.value ? 'active' : ''}`}
-            onClick={() => setSelectedGenre(g.value)}
-          >
-            {g.label}
+      <form
+        className="explore-search-bar"
+        onSubmit={(e) => {
+          e.preventDefault();
+          void runSearch(searchInput);
+        }}
+      >
+        <Search size={17} color="var(--text-muted)" />
+        <input
+          className="search-inline-input"
+          placeholder="Buscar música ou artista online..."
+          value={searchInput}
+          onChange={(e) => setSearchInput(e.target.value)}
+        />
+        {searchInput && (
+          <button type="button" onClick={handleClearSearch} aria-label="Limpar busca">
+            <X size={15} color="var(--text-muted)" />
           </button>
-        ))}
+        )}
+        <button type="submit" className="explore-search-submit">
+          Buscar
+        </button>
+      </form>
+
+      <div className="genre-scroll">
+        {GENRES.map((g) => {
+          const active = !activeSearchQuery && selectedGenre === g.value;
+          return (
+            <button
+              key={g.label}
+              type="button"
+              className={`genre-chip ${active ? 'active' : ''}`}
+              onClick={() => handleSelectGenre(g.value)}
+            >
+              {g.label}
+            </button>
+          );
+        })}
       </div>
+
+      {activeSearchQuery ? (
+        <div className="explore-status-row">
+          <span className="track-sub" style={{ fontSize: 12.5 }}>
+            Resultados para &quot;{activeSearchQuery}&quot;
+          </span>
+          <button
+            type="button"
+            style={{ color: 'var(--primary)', fontSize: 12.5, fontWeight: 700 }}
+            onClick={handleClearSearch}
+          >
+            Limpar
+          </button>
+        </div>
+      ) : (
+        <div className="explore-status-row">
+          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 12, fontWeight: 700, color: 'var(--text-secondary)' }}>
+            <Flame size={14} color="var(--primary)" />
+            {selectedGenre ? `Em Alta • ${selectedGenre}` : 'Em Alta Agora'}
+          </span>
+          <span className="track-count-meta">{tracks.length} faixas</span>
+        </div>
+      )}
 
       {!isOnline ? (
         <div className="empty-box">
           <WifiOff size={38} color="#fbbf24" />
           <h2 className="empty-title">Você está offline</h2>
           <p className="empty-subtitle">
-            O Explorar carrega faixas em alta da internet. Suas músicas importadas e
+            O Explorar carrega e pesquisa faixas da internet. Suas músicas importadas e
             baixadas continuam funcionando normalmente na Biblioteca!
           </p>
         </div>
       ) : isLoading ? (
-        <div
-          style={{
-            display: 'flex',
-            flexDirection: 'column',
-            alignItems: 'center',
-            justifyContent: 'center',
-            padding: '64px 20px',
-            gap: 12,
-            color: 'var(--text-secondary)',
-          }}
-        >
+        <div className="explore-loading-box">
           <Loader2 size={32} className="spin" color="var(--primary)" />
-          <span style={{ fontSize: 14 }}>Carregando músicas em alta...</span>
+          <span>
+            {activeSearchQuery ? 'Buscando músicas online...' : 'Carregando músicas em alta...'}
+          </span>
         </div>
       ) : tracks.length === 0 ? (
         <div className="empty-box">
-          <Flame size={38} color="var(--text-muted)" />
+          <Music size={34} color="var(--text-muted)" />
           <h2 className="empty-title">Nenhuma faixa encontrada</h2>
           <p className="empty-subtitle">
-            Não foi possível carregar o catálogo no momento. Toque em atualizar para tentar
-            novamente.
+            {activeSearchQuery
+              ? 'Tente outro termo de busca.'
+              : 'Tente atualizar a lista novamente.'}
           </p>
         </div>
       ) : (
@@ -141,45 +235,69 @@ export const ExploreScreen: React.FC = () => {
           {tracks.map((item, idx) => {
             const isDownloading = downloadingId === item.id;
             const isDownloaded = libraryTracks.some(
-              (t) => t.id === `dl-${item.id}` && t.sourceType === 'downloaded'
+              (t) =>
+                (t.id === `dl-${item.id}` && t.sourceType === 'downloaded') ||
+                (t.sourceType === 'downloaded' &&
+                  t.name.toLowerCase() === item.title.toLowerCase())
             );
             return (
-              <div key={item.id} className="track-card">
-                <span className="rank-num">{idx + 1}</span>
-                <img src={item.artworkUrl} alt={item.title} className="track-art" />
+              <div
+                key={item.id}
+                className="track-card"
+                onClick={() => void streamOnlineTrack(item)}
+                role="button"
+                tabIndex={0}
+              >
+                {!activeSearchQuery && <span className="rank-num">{idx + 1}</span>}
+                {item.artworkUrl && !brokenArtIds[item.id] ? (
+                  <img
+                    src={item.artworkUrl}
+                    alt={item.title}
+                    className="track-art"
+                    onError={() =>
+                      setBrokenArtIds((prev) => ({ ...prev, [item.id]: true }))
+                    }
+                  />
+                ) : (
+                  <div className="track-art-placeholder">
+                    <Music size={18} />
+                  </div>
+                )}
                 <div className="track-info">
                   <div className="track-title">{item.title}</div>
-                  <div className="track-sub">
-                    {item.artist}
-                    {item.durationMs ? ` • ${formatTime(item.durationMs)}` : ''}
+                  <div className="track-sub" style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                    <span style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                      {item.artist}
+                      {item.durationMs ? ` • ${formatTime(item.durationMs)}` : ''}
+                    </span>
+                    <span className="online-badge">ONLINE</span>
                   </div>
                 </div>
-                <div className="track-actions">
+
+                <div className="track-actions" onClick={(e) => e.stopPropagation()}>
                   <button
                     type="button"
                     className="small-icon-btn"
                     style={{ color: 'var(--primary)' }}
                     aria-label={`Tocar ${item.title}`}
-                    onClick={() => streamOnlineTrack(item)}
+                    onClick={() => void streamOnlineTrack(item)}
                   >
-                    <Play size={18} fill="currentColor" />
+                    <Play size={16} fill="currentColor" />
                   </button>
+
                   <button
                     type="button"
                     className="small-icon-btn"
-                    style={{
-                      color: isDownloaded ? 'var(--primary)' : 'var(--text)',
-                    }}
                     aria-label={`Baixar ${item.title} offline`}
                     disabled={isDownloading}
-                    onClick={() => handleDownload(item)}
+                    onClick={() => void handleDownload(item)}
                   >
                     {isDownloading ? (
-                      <Loader2 size={18} className="spin" color="var(--primary)" />
+                      <Loader2 size={16} className="spin" color="var(--primary)" />
                     ) : isDownloaded ? (
-                      <Check size={18} />
+                      <Check size={17} color="var(--primary)" />
                     ) : (
-                      <Download size={18} />
+                      <Download size={16} />
                     )}
                   </button>
                 </div>

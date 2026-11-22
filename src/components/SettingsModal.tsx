@@ -1,5 +1,15 @@
 import React, { useEffect, useState } from 'react';
-import { ChevronDown, HardDrive, ShieldCheck, Trash2 } from 'lucide-react';
+import {
+  ChevronDown,
+  Compass,
+  FolderPlus,
+  HardDrive,
+  Loader2,
+  Music,
+  ShieldCheck,
+  Sparkles,
+  Trash2,
+} from 'lucide-react';
 import { usePlayer } from '../context/PlayerContext';
 import { getStorageEstimate } from '../utils/db';
 import { LyricFontSize } from '../types/music';
@@ -7,6 +17,8 @@ import { LyricFontSize } from '../types/music';
 interface SettingsModalProps {
   visible: boolean;
   onClose: () => void;
+  onPickFolder?: () => void;
+  onPickFiles?: () => void;
 }
 
 function formatMB(bytes: number): string {
@@ -15,8 +27,24 @@ function formatMB(bytes: number): string {
   return `${mb.toFixed(1).replace('.', ',')} MB`;
 }
 
-export const SettingsModal: React.FC<SettingsModalProps> = ({ visible, onClose }) => {
-  const { settings, updateSettings, clearCache, clearAllData } = usePlayer();
+export const SettingsModal: React.FC<SettingsModalProps> = ({
+  visible,
+  onClose,
+  onPickFolder,
+  onPickFiles,
+}) => {
+  const {
+    settings,
+    updateSettings,
+    clearCache,
+    clearAllData,
+    isSyncingAssets,
+    syncProgress,
+    syncAllLibraryAssets,
+    replayTour,
+    libraryTracks,
+  } = usePlayer();
+
   const [storageInfo, setStorageInfo] = useState({
     usedBytes: 0,
     quotaBytes: 0,
@@ -34,7 +62,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ visible, onClose }
       setConfirmMode('none');
       refreshStorage();
     }
-  }, [visible]);
+  }, [visible, isSyncingAssets]);
 
   if (!visible) return null;
 
@@ -60,14 +88,51 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ visible, onClose }
       </div>
 
       <div className="modal-body-scroll">
+        {/* Pasta de Músicas */}
         <div className="section-label" style={{ marginTop: 4 }}>
-          Capas e Metadados
+          Pasta de Músicas
         </div>
+        <div className="settings-card">
+          <div className="setting-desc" style={{ marginTop: 0, marginBottom: 12, lineHeight: 1.5 }}>
+            Importe uma pasta inteira ou arquivos avulsos para salvar offline no navegador ({libraryTracks.length}{' '}
+            {libraryTracks.length === 1 ? 'faixa na biblioteca' : 'faixas na biblioteca'}).
+          </div>
+
+          <div style={{ display: 'flex', gap: 8 }}>
+            <button
+              type="button"
+              className="pill-primary-btn"
+              style={{ flex: 1 }}
+              onClick={() => {
+                onClose();
+                setTimeout(() => onPickFolder?.(), 150);
+              }}
+            >
+              <FolderPlus size={16} />
+              <span>Selecionar Pasta</span>
+            </button>
+
+            <button
+              type="button"
+              className="pill-secondary-btn"
+              onClick={() => {
+                onClose();
+                setTimeout(() => onPickFiles?.(), 150);
+              }}
+            >
+              <Music size={15} />
+              <span>Arquivos</span>
+            </button>
+          </div>
+        </div>
+
+        {/* Capas e Letras */}
+        <div className="section-label">Capas e Letras</div>
         <div className="settings-card">
           <div className="setting-row">
             <div>
               <div className="setting-title">Buscar capas automaticamente</div>
-              <div className="setting-desc">Procura capas HD ao tocar músicas sem capa</div>
+              <div className="setting-desc">Procura capas HD ao importar ou tocar músicas</div>
             </div>
             <label className="switch">
               <input
@@ -84,7 +149,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ visible, onClose }
           <div className="setting-row">
             <div>
               <div className="setting-title">Preferir capa embutida (ID3)</div>
-              <div className="setting-desc">Usa a imagem salva dentro do arquivo MP3</div>
+              <div className="setting-desc">Usa a imagem salva dentro do arquivo ou cover.jpg</div>
             </div>
             <label className="switch">
               <input
@@ -133,10 +198,9 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ visible, onClose }
               <span className="switch-track" />
             </label>
           </div>
-        </div>
 
-        <div className="section-label">Letras</div>
-        <div className="settings-card">
+          <div className="setting-divider" />
+
           <div className="setting-row">
             <div>
               <div className="setting-title">Buscar letras automaticamente</div>
@@ -154,6 +218,35 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ visible, onClose }
 
           <div className="setting-divider" />
 
+          <button
+            type="button"
+            className="discrete-action-row"
+            disabled={isSyncingAssets}
+            onClick={async () => {
+              await syncAllLibraryAssets();
+              await refreshStorage();
+            }}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10, flex: 1, textAlign: 'left' }}>
+              <Sparkles size={16} color="var(--primary)" style={{ flexShrink: 0 }} />
+              <div>
+                <div className="setting-title">Puxar capas e letras faltantes</div>
+                <div className="setting-desc">
+                  {isSyncingAssets && syncProgress
+                    ? `Sincronizando ${syncProgress.current} de ${syncProgress.total}...`
+                    : 'Busca em segundo plano para faixas sem capa ou letra'}
+                </div>
+              </div>
+            </div>
+            <span className="discrete-pill">
+              {isSyncingAssets ? <Loader2 size={14} className="spin" /> : 'Puxar'}
+            </span>
+          </button>
+        </div>
+
+        {/* Geral */}
+        <div className="section-label">Geral</div>
+        <div className="settings-card">
           <div className="setting-title">Tamanho da fonte da letra</div>
           <div className="segment-row">
             {fontOptions.map((opt) => (
@@ -169,8 +262,31 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ visible, onClose }
               </button>
             ))}
           </div>
+
+          <div className="setting-divider" />
+
+          <button
+            type="button"
+            className="discrete-action-row"
+            onClick={() => {
+              onClose();
+              setTimeout(() => replayTour(), 200);
+            }}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10, flex: 1, textAlign: 'left' }}>
+              <Compass size={17} color="var(--primary)" style={{ flexShrink: 0 }} />
+              <div>
+                <div className="setting-title">Rever Tour do App</div>
+                <div className="setting-desc">
+                  Mostra novamente a introdução rápida das telas principais
+                </div>
+              </div>
+            </div>
+            <span className="discrete-pill">Abrir</span>
+          </button>
         </div>
 
+        {/* Armazenamento Offline */}
         <div className="section-label">Armazenamento Offline</div>
         <div className="settings-card" style={{ marginBottom: 12 }}>
           <div className="setting-row">
@@ -200,7 +316,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ visible, onClose }
         {confirmMode === 'cache' ? (
           <div className="settings-card" style={{ marginBottom: 10 }}>
             <div className="setting-title" style={{ marginBottom: 10 }}>
-              Apagar todas as capas e letras salvas em cache?
+              Apagar todas as capas, letras e traduções em cache?
             </div>
             <div style={{ display: 'flex', gap: 10 }}>
               <button

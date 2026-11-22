@@ -9,6 +9,7 @@ export interface AudioTrack {
   name: string;
   artist: string;
   album?: string;
+  folderName?: string;
   durationMs?: number;
   sourceType: TrackSourceType;
   streamUrl?: string;
@@ -16,6 +17,11 @@ export interface AudioTrack {
   addedAt: number;
   fileSize?: number;
   mimeType?: string;
+}
+
+export interface SleepTimerState {
+  endTimeMs: number | null;
+  untilTrackEnd: boolean;
 }
 
 export interface Playlist {

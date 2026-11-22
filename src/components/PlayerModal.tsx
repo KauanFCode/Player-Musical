@@ -2,12 +2,14 @@ import React, { useEffect, useRef, useState } from 'react';
 import {
   AlignLeft,
   ChevronDown,
+  Heart,
   Image as ImageIcon,
+  Languages,
   ListMusic,
   Loader2,
+  Moon,
   Music,
   Pause,
-  Pencil,
   Play,
   Repeat,
   Repeat1,
@@ -20,7 +22,9 @@ import {
 } from 'lucide-react';
 import { usePlayer } from '../context/PlayerContext';
 import { formatTime, getActiveLyricIndex, parseLrc } from '../utils/lrcParser';
-import { LrcLine } from '../types/music';
+import { translateLyricsLines } from '../utils/assetCache';
+import { getCachedLyricsTranslation } from '../utils/storage';
+import { LrcLine, LyricFontSize } from '../types/music';
 import { MarqueeText } from './MarqueeText';
 
 type CenterTab = 'cover' | 'lyrics' | 'queue';
@@ -40,11 +44,11 @@ export const PlayerModal: React.FC = () => {
     repeatMode,
     settings,
     lyricsRevision,
+    sleepTimer,
     getTrackArtworkUrl,
     resolveLyricsForTrack,
     updateTrackCover,
     updateTrackLyrics,
-    updateTrackInfo,
     togglePlayPause,
     playNext,
     playPrevious,
@@ -54,40 +58,61 @@ export const PlayerModal: React.FC = () => {
     toggleShuffle,
     cycleRepeatMode,
     jumpToQueueIndex,
+    isFavorite,
+    toggleFavorite,
+    getLyricOffset,
+    adjustLyricOffset,
+    resetLyricOffset,
+    setSleepTimerMinutes,
+    setSleepTimerEndOfTrack,
+    cancelSleepTimer,
+    updateSettings,
   } = usePlayer();
 
   const [centerTab, setCenterTab] = useState<CenterTab>('cover');
   const [isSeeking, setIsSeeking] = useState(false);
   const [seekValue, setSeekValue] = useState(0);
+  const [isSleepModalVisible, setIsSleepModalVisible] = useState(false);
+  const [sleepRemainingSec, setSleepRemainingSec] = useState(0);
 
   const [parsedLyrics, setParsedLyrics] = useState<LrcLine[]>([]);
   const [isLoadingLyrics, setIsLoadingLyrics] = useState(false);
   const [activeLyricIdx, setActiveLyricIdx] = useState(-1);
-
-  const [isEditOpen, setIsEditOpen] = useState(false);
-  const [editName, setEditName] = useState('');
-  const [editArtist, setEditArtist] = useState('');
-  const [editAlbum, setEditAlbum] = useState('');
+  const [translatedLines, setTranslatedLines] = useState<string[] | null>(null);
+  const [showTranslation, setShowTranslation] = useState(false);
+  const [isTranslating, setIsTranslating] = useState(false);
 
   const coverInputRef = useRef<HTMLInputElement>(null);
   const lrcInputRef = useRef<HTMLInputElement>(null);
   const lyricLineRefs = useRef<Record<number, HTMLButtonElement | null>>({});
 
-  // Load lyrics whenever track or lyricsRevision changes
+  // Load lyrics & cached translation whenever track or lyricsRevision changes
   useEffect(() => {
     let cancelled = false;
     const load = async () => {
       if (!currentTrack) {
         setParsedLyrics([]);
         setActiveLyricIdx(-1);
+        setTranslatedLines(null);
+        setShowTranslation(false);
         return;
       }
       setIsLoadingLyrics(true);
       setActiveLyricIdx(-1);
+      setTranslatedLines(null);
+      setShowTranslation(false);
+      setIsTranslating(false);
       try {
         const raw = await resolveLyricsForTrack(currentTrack);
         if (cancelled) return;
-        setParsedLyrics(raw ? parseLrc(raw) : []);
+        const lines = raw ? parseLrc(raw) : [];
+        setParsedLyrics(lines);
+        if (lines.length > 0) {
+          const cached = getCachedLyricsTranslation(currentTrack.id);
+          if (cached && cached.length === lines.length) {
+            setTranslatedLines(cached);
+          }
+        }
       } finally {
         if (!cancelled) setIsLoadingLyrics(false);
       }
@@ -98,10 +123,28 @@ export const PlayerModal: React.FC = () => {
     };
   }, [currentTrack, lyricsRevision, resolveLyricsForTrack]);
 
-  // Auto-scroll active lyric line
+  // Countdown for Sleep Timer
+  useEffect(() => {
+    if (!isPlayerModalVisible || !sleepTimer.endTimeMs) {
+      setSleepRemainingSec(0);
+      return;
+    }
+    const tick = () => {
+      setSleepRemainingSec(
+        Math.max(0, Math.ceil((sleepTimer.endTimeMs! - Date.now()) / 1000))
+      );
+    };
+    tick();
+    const id = window.setInterval(tick, 1000);
+    return () => window.clearInterval(id);
+  }, [isPlayerModalVisible, sleepTimer.endTimeMs]);
+
+  const currentLyricOffset = currentTrack ? getLyricOffset(currentTrack.id) : 0;
+
+  // Auto-scroll active lyric line centered
   useEffect(() => {
     if (parsedLyrics.length === 0 || isSeeking) return;
-    const idx = getActiveLyricIndex(parsedLyrics, positionMs, 350);
+    const idx = getActiveLyricIndex(parsedLyrics, positionMs + currentLyricOffset, 350);
     if (idx !== activeLyricIdx) {
       setActiveLyricIdx(idx);
       if (centerTab === 'lyrics' && idx >= 0) {
@@ -111,7 +154,19 @@ export const PlayerModal: React.FC = () => {
         });
       }
     }
-  }, [positionMs, parsedLyrics, isSeeking, activeLyricIdx, centerTab]);
+  }, [positionMs, currentLyricOffset, parsedLyrics, isSeeking, activeLyricIdx, centerTab]);
+
+  // Center active line when entering Lyrics view or toggling translation
+  useEffect(() => {
+    if (centerTab !== 'lyrics' || activeLyricIdx < 0) return;
+    const t = window.setTimeout(() => {
+      lyricLineRefs.current[activeLyricIdx]?.scrollIntoView({
+        behavior: 'smooth',
+        block: 'center',
+      });
+    }, 80);
+    return () => window.clearTimeout(t);
+  }, [centerTab, showTranslation, activeLyricIdx]);
 
   if (!isPlayerModalVisible || !currentTrack) return null;
 
@@ -119,12 +174,33 @@ export const PlayerModal: React.FC = () => {
   const displayPos = isSeeking ? seekValue : positionMs;
   const maxDur = durationMs > 0 ? durationMs : 1;
 
+  const fontScaleOrder: LyricFontSize[] = ['small', 'medium', 'large'];
+  const currentFontIdx = Math.max(0, fontScaleOrder.indexOf(settings.lyricFontSize));
+  const stepLyricFont = (dir: -1 | 1) => {
+    const nextIdx = Math.max(0, Math.min(fontScaleOrder.length - 1, currentFontIdx + dir));
+    void updateSettings({ lyricFontSize: fontScaleOrder[nextIdx] });
+  };
+
   const fontSizePx =
     settings.lyricFontSize === 'small'
-      ? 15
+      ? 16
       : settings.lyricFontSize === 'large'
-        ? 21
-        : 17.5;
+        ? 23
+        : 19;
+
+  const isSleepActive = Boolean(sleepTimer.endTimeMs) || sleepTimer.untilTrackEnd;
+  const sleepChipLabel = sleepTimer.untilTrackEnd
+    ? 'Fim faixa'
+    : sleepTimer.endTimeMs
+      ? formatTime(sleepRemainingSec * 1000)
+      : 'Timer';
+
+  const offsetLabel =
+    currentLyricOffset === 0
+      ? '0.0s'
+      : `${currentLyricOffset > 0 ? '+' : ''}${(currentLyricOffset / 1000).toFixed(1)}s`;
+
+  const currentFav = isFavorite(currentTrack.id);
 
   const handleCoverPick = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -141,26 +217,36 @@ export const PlayerModal: React.FC = () => {
       if (text.trim()) {
         await updateTrackLyrics(currentTrack.id, text);
         setParsedLyrics(parseLrc(text));
+        setTranslatedLines(null);
+        setShowTranslation(false);
       }
     }
     e.target.value = '';
   };
 
-  const openEditDialog = () => {
-    setEditName(currentTrack.name);
-    setEditArtist(currentTrack.artist);
-    setEditAlbum(currentTrack.album || '');
-    setIsEditOpen(true);
-  };
-
-  const saveEditDialog = async (e: React.FormEvent) => {
-    e.preventDefault();
-    await updateTrackInfo(currentTrack.id, {
-      name: editName,
-      artist: editArtist,
-      album: editAlbum,
-    });
-    setIsEditOpen(false);
+  const handleToggleTranslation = async () => {
+    if (parsedLyrics.length === 0) return;
+    if (showTranslation) {
+      setShowTranslation(false);
+      return;
+    }
+    if (translatedLines && translatedLines.length === parsedLyrics.length) {
+      setShowTranslation(true);
+      return;
+    }
+    setIsTranslating(true);
+    try {
+      const translated = await translateLyricsLines(
+        currentTrack.id,
+        parsedLyrics.map((l) => l.text)
+      );
+      setTranslatedLines(translated);
+      setShowTranslation(true);
+    } catch {
+      // Silently ignore translation failure offline
+    } finally {
+      setIsTranslating(false);
+    }
   };
 
   return (
@@ -209,7 +295,7 @@ export const PlayerModal: React.FC = () => {
           >
             TOCANDO AGORA
           </div>
-          {currentTrack.album && (
+          {(currentTrack.album || currentTrack.folderName) && (
             <div
               style={{
                 fontSize: 12,
@@ -219,7 +305,7 @@ export const PlayerModal: React.FC = () => {
                 textOverflow: 'ellipsis',
               }}
             >
-              {currentTrack.album}
+              {currentTrack.album || currentTrack.folderName}
             </div>
           )}
         </div>
@@ -272,7 +358,7 @@ export const PlayerModal: React.FC = () => {
                   onClick={() => coverInputRef.current?.click()}
                 >
                   <ImageIcon size={14} />
-                  Alterar Capa
+                  Capa
                 </button>
                 <button
                   type="button"
@@ -280,84 +366,152 @@ export const PlayerModal: React.FC = () => {
                   onClick={() => lrcInputRef.current?.click()}
                 >
                   <Upload size={14} />
-                  Importar .LRC
+                  .LRC
                 </button>
                 <button
                   type="button"
-                  className="chip-btn"
-                  onClick={openEditDialog}
+                  className={`chip-btn ${isSleepActive ? 'chip-btn-active' : ''}`}
+                  onClick={() => setIsSleepModalVisible(true)}
                 >
-                  <Pencil size={14} />
-                  Editar Info
+                  <Moon size={14} />
+                  {sleepChipLabel}
                 </button>
               </div>
             </>
           )}
 
           {centerTab === 'lyrics' && (
-            <div className="lyrics-container">
-              {isLoadingLyrics ? (
-                <div
-                  style={{
-                    height: '100%',
-                    display: 'flex',
-                    flexDirection: 'column',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    gap: 10,
-                    color: 'var(--text-secondary)',
-                  }}
-                >
-                  <Loader2 size={32} className="spin" color="var(--primary)" />
-                  <span style={{ fontSize: 14 }}>Buscando letra...</span>
-                </div>
-              ) : parsedLyrics.length === 0 ? (
-                <div
-                  style={{
-                    height: '100%',
-                    display: 'flex',
-                    flexDirection: 'column',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    gap: 12,
-                    color: 'var(--text-secondary)',
-                  }}
-                >
-                  <AlignLeft size={38} color="var(--text-muted)" />
-                  <span style={{ fontSize: 14 }}>Nenhuma letra encontrada.</span>
+            <div className="lyrics-view-wrap">
+              <div className="lyrics-toolbar">
+                <div className="lyrics-tool-group">
                   <button
                     type="button"
-                    className="pill-primary-btn"
-                    onClick={() => lrcInputRef.current?.click()}
+                    className="lyrics-tool-btn"
+                    disabled={currentFontIdx === 0}
+                    onClick={() => stepLyricFont(-1)}
+                    aria-label="Diminuir fonte"
                   >
-                    <Upload size={15} />
-                    Importar arquivo .LRC
+                    A-
+                  </button>
+                  <button
+                    type="button"
+                    className="lyrics-tool-btn"
+                    disabled={currentFontIdx === fontScaleOrder.length - 1}
+                    onClick={() => stepLyricFont(1)}
+                    aria-label="Aumentar fonte"
+                  >
+                    A+
                   </button>
                 </div>
-              ) : (
-                parsedLyrics.map((line, idx) => {
-                  const isActive = idx === activeLyricIdx;
-                  return (
+
+                <div className="lyrics-tool-group">
+                  <button
+                    type="button"
+                    className="lyrics-tool-btn"
+                    onClick={() => adjustLyricOffset(currentTrack.id, -500)}
+                    aria-label="Atrasar letra em 0.5s"
+                  >
+                    -0.5s
+                  </button>
+                  <button
+                    type="button"
+                    className={`lyrics-offset-pill ${currentLyricOffset !== 0 ? 'active' : ''}`}
+                    onClick={() => resetLyricOffset(currentTrack.id)}
+                    aria-label="Zerar sincronia"
+                  >
+                    {offsetLabel}
+                  </button>
+                  <button
+                    type="button"
+                    className="lyrics-tool-btn"
+                    onClick={() => adjustLyricOffset(currentTrack.id, 500)}
+                    aria-label="Adiantar letra em 0.5s"
+                  >
+                    +0.5s
+                  </button>
+                </div>
+
+                <button
+                  type="button"
+                  className={`translate-btn ${showTranslation ? 'active' : ''}`}
+                  disabled={isTranslating || parsedLyrics.length === 0}
+                  onClick={handleToggleTranslation}
+                >
+                  {isTranslating ? (
+                    <Loader2 size={13} className="spin" />
+                  ) : (
+                    <>
+                      <Languages size={13} />
+                      <span>{showTranslation ? 'PT-BR' : 'Traduzir'}</span>
+                    </>
+                  )}
+                </button>
+              </div>
+
+              <div className="lyrics-container lyrics-centered-container">
+                {isLoadingLyrics ? (
+                  <div className="lyrics-empty-center">
+                    <Loader2 size={32} className="spin" color="var(--primary)" />
+                    <span style={{ fontSize: 14 }}>Buscando letra...</span>
+                  </div>
+                ) : parsedLyrics.length === 0 ? (
+                  <div className="lyrics-empty-center">
+                    <AlignLeft size={38} color="var(--text-muted)" />
+                    <span style={{ fontSize: 14 }}>Nenhuma letra encontrada.</span>
                     <button
-                      key={`${idx}-${line.timeMs}`}
                       type="button"
-                      ref={(el) => {
-                        lyricLineRefs.current[idx] = el;
-                      }}
-                      className={`lyric-line ${isActive ? 'active' : ''}`}
-                      style={{
-                        fontSize: isActive ? fontSizePx + 3 : fontSizePx,
-                        cursor: line.timeMs >= 0 ? 'pointer' : 'default',
-                      }}
-                      onClick={() => {
-                        if (line.timeMs >= 0) seekTo(line.timeMs);
-                      }}
+                      className="pill-primary-btn"
+                      onClick={() => lrcInputRef.current?.click()}
                     >
-                      {line.text}
+                      <Upload size={15} />
+                      Importar arquivo .LRC
                     </button>
-                  );
-                })
-              )}
+                  </div>
+                ) : (
+                  <div className="lyrics-list-centered">
+                    {parsedLyrics.map((line, idx) => {
+                      const isActive = idx === activeLyricIdx;
+                      const translated =
+                        showTranslation && translatedLines?.[idx]
+                          ? translatedLines[idx].trim()
+                          : '';
+                      const shouldShowTranslation =
+                        Boolean(translated) &&
+                        translated.toLowerCase() !== line.text.trim().toLowerCase();
+
+                      return (
+                        <button
+                          key={`${idx}-${line.timeMs}`}
+                          type="button"
+                          ref={(el) => {
+                            lyricLineRefs.current[idx] = el;
+                          }}
+                          className={`lyric-line ${isActive ? 'active' : ''}`}
+                          style={{
+                            fontSize: isActive ? fontSizePx + 4 : fontSizePx,
+                            cursor: line.timeMs >= 0 ? 'pointer' : 'default',
+                          }}
+                          onClick={() => {
+                            if (line.timeMs >= 0) {
+                              seekTo(Math.max(0, line.timeMs - currentLyricOffset));
+                            }
+                          }}
+                        >
+                          <span>{line.text}</span>
+                          {shouldShowTranslation && (
+                            <span
+                              className={`lyric-translation ${isActive ? 'active' : ''}`}
+                              style={{ fontSize: Math.max(12.5, fontSizePx - 3.5) }}
+                            >
+                              {translated}
+                            </span>
+                          )}
+                        </button>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
             </div>
           )}
 
@@ -405,22 +559,25 @@ export const PlayerModal: React.FC = () => {
 
         {/* Bottom Controls */}
         <div style={{ paddingTop: 10 }}>
-          <div style={{ textAlign: 'center', marginBottom: 12 }}>
-            <div style={{ fontSize: 21, fontWeight: 800 }}>
-              <MarqueeText text={currentTrack.name} />
+          <div className="player-title-row">
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{ fontSize: 21, fontWeight: 800 }}>
+                <MarqueeText text={currentTrack.name} />
+              </div>
+              <div className="player-artist-sub">{currentTrack.artist}</div>
             </div>
-            <div
-              style={{
-                fontSize: 13.5,
-                color: 'var(--text-secondary)',
-                marginTop: 3,
-                whiteSpace: 'nowrap',
-                overflow: 'hidden',
-                textOverflow: 'ellipsis',
-              }}
+            <button
+              type="button"
+              className="icon-btn"
+              onClick={() => toggleFavorite(currentTrack.id)}
+              aria-label="Favoritar música"
             >
-              {currentTrack.artist}
-            </div>
+              <Heart
+                size={21}
+                color={currentFav ? 'var(--primary)' : 'var(--text-secondary)'}
+                fill={currentFav ? 'var(--primary)' : 'none'}
+              />
+            </button>
           </div>
 
           <input
@@ -526,7 +683,7 @@ export const PlayerModal: React.FC = () => {
               className="quick-seek-btn"
               onClick={() => skipBackward(10)}
             >
-              <RotateCcw size={15} />
+              <RotateCcw size={14} />
               -10s
             </button>
             <button
@@ -535,65 +692,63 @@ export const PlayerModal: React.FC = () => {
               onClick={() => skipForward(10)}
             >
               +10s
-              <RotateCw size={15} />
+              <RotateCw size={14} />
             </button>
           </div>
         </div>
       </div>
 
-      {/* Edit Track Info Mini-Dialog */}
-      {isEditOpen && (
-        <div className="modal-backdrop" onClick={() => setIsEditOpen(false)}>
-          <form
-            className="dialog-card"
-            onClick={(e) => e.stopPropagation()}
-            onSubmit={saveEditDialog}
-          >
-            <h3 className="dialog-title">Editar Informações</h3>
-
-            <label className="setting-desc" style={{ display: 'block', marginBottom: 4 }}>
-              Título
-            </label>
-            <input
-              className="search-input"
-              style={{ marginBottom: 10 }}
-              value={editName}
-              onChange={(e) => setEditName(e.target.value)}
-              required
-            />
-
-            <label className="setting-desc" style={{ display: 'block', marginBottom: 4 }}>
-              Artista
-            </label>
-            <input
-              className="search-input"
-              style={{ marginBottom: 10 }}
-              value={editArtist}
-              onChange={(e) => setEditArtist(e.target.value)}
-            />
-
-            <label className="setting-desc" style={{ display: 'block', marginBottom: 4 }}>
-              Álbum
-            </label>
-            <input
-              className="search-input"
-              value={editAlbum}
-              onChange={(e) => setEditAlbum(e.target.value)}
-            />
-
-            <div className="dialog-actions">
+      {/* Sleep Timer Sheet */}
+      {isSleepModalVisible && (
+        <div className="modal-backdrop" onClick={() => setIsSleepModalVisible(false)}>
+          <div className="dialog-card action-sheet-card" onClick={(e) => e.stopPropagation()}>
+            <h3 className="dialog-title">Temporizador (Sleep Timer)</h3>
+            {[15, 30, 45, 60].map((mins) => (
+              <button
+                key={mins}
+                type="button"
+                className="action-sheet-row"
+                onClick={() => {
+                  setSleepTimerMinutes(mins);
+                  setIsSleepModalVisible(false);
+                }}
+              >
+                <Moon size={16} color="var(--primary)" />
+                <span>Parar em {mins} minutos</span>
+              </button>
+            ))}
+            <button
+              type="button"
+              className="action-sheet-row"
+              onClick={() => {
+                setSleepTimerEndOfTrack();
+                setIsSleepModalVisible(false);
+              }}
+            >
+              <Moon size={16} color="var(--text-secondary)" />
+              <span>Ao fim da música atual</span>
+            </button>
+            {isSleepActive && (
               <button
                 type="button"
-                className="pill-secondary-btn"
-                onClick={() => setIsEditOpen(false)}
+                className="action-sheet-row danger"
+                onClick={() => {
+                  cancelSleepTimer();
+                  setIsSleepModalVisible(false);
+                }}
               >
-                Cancelar
+                <span>Desativar temporizador</span>
               </button>
-              <button type="submit" className="pill-primary-btn">
-                Salvar
-              </button>
-            </div>
-          </form>
+            )}
+            <button
+              type="button"
+              className="pill-secondary-btn"
+              style={{ width: '100%', marginTop: 10 }}
+              onClick={() => setIsSleepModalVisible(false)}
+            >
+              Fechar
+            </button>
+          </div>
         </div>
       )}
     </div>

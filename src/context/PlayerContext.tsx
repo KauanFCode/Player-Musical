@@ -14,7 +14,17 @@ import {
   OnlineTrack,
   Playlist,
   RepeatMode,
+  SleepTimerState,
 } from '../types/music';
+import {
+  clearTranslatedLyricsCache,
+  loadFavorites,
+  loadHasCompletedTour,
+  loadLyricOffsets,
+  saveFavorites,
+  saveHasCompletedTour,
+  saveLyricOffsets,
+} from '../utils/storage';
 import {
   clearArtworkAndLyricsCache,
   clearEntireLibrary,
@@ -50,6 +60,7 @@ import {
 import {
   downloadTrackBlob,
   fetchTrendingTracks,
+  searchOnlineTracks,
 } from '../services/onlineMusicService';
 import { findLyrics } from '../utils/assetCache';
 
@@ -105,13 +116,24 @@ interface PlayerContextValue {
   // Library & Playlists
   libraryTracks: AudioTrack[];
   userPlaylists: Playlist[];
+  favoriteIds: string[];
   settings: AppSettings;
   isSyncingAssets: boolean;
+  syncProgress: { current: number; total: number } | null;
   lyricsRevision: number;
+  sleepTimer: SleepTimerState;
+
+  // First-run Tour
+  hasCompletedTour: boolean;
+  isTourVisible: boolean;
+  completeTour: () => void;
+  replayTour: () => void;
 
   // Playback actions
   playTrack: (track: AudioTrack, sourceList?: AudioTrack[]) => Promise<void>;
   playQueue: (tracks: AudioTrack[], startIndex?: number) => Promise<void>;
+  playNextInQueue: (track: AudioTrack) => Promise<void>;
+  addToQueue: (track: AudioTrack) => Promise<void>;
   jumpToQueueIndex: (index: number) => Promise<void>;
   togglePlayPause: () => Promise<void>;
   playNext: () => Promise<void>;
@@ -122,15 +144,21 @@ interface PlayerContextValue {
   toggleShuffle: () => void;
   cycleRepeatMode: () => void;
 
+  // Favorites, Lyrics Sync & Sleep Timer
+  isFavorite: (trackId: string) => boolean;
+  toggleFavorite: (trackId: string) => void;
+  getLyricOffset: (trackId: string) => number;
+  adjustLyricOffset: (trackId: string, deltaMs: number) => void;
+  resetLyricOffset: (trackId: string) => void;
+  setSleepTimerMinutes: (minutes: number) => void;
+  setSleepTimerEndOfTrack: () => void;
+  cancelSleepTimer: () => void;
+
   // Import, Online & Metadata
   importLocalFiles: (files: FileList | File[]) => Promise<void>;
   streamOnlineTrack: (track: OnlineTrack) => Promise<void>;
   downloadOnlineTrack: (track: OnlineTrack) => Promise<void>;
   removeTrack: (trackId: string) => Promise<void>;
-  updateTrackInfo: (
-    trackId: string,
-    info: { name: string; artist: string; album?: string }
-  ) => Promise<void>;
   updateTrackCover: (trackId: string, fileOrBlob: Blob) => Promise<void>;
   updateTrackLyrics: (trackId: string, lyricsText: string) => Promise<void>;
   getTrackArtworkUrl: (track: AudioTrack | null | undefined) => string | undefined;
@@ -148,8 +176,9 @@ interface PlayerContextValue {
   clearCache: () => Promise<void>;
   clearAllData: () => Promise<void>;
 
-  // Re-export helper
+  // Re-export helpers
   fetchTrendingTracks: typeof fetchTrendingTracks;
+  searchOnlineTracks: typeof searchOnlineTracks;
 }
 
 const PlayerContext = createContext<PlayerContextValue | null>(null);
@@ -172,10 +201,23 @@ export const PlayerProvider: React.FC<{ children: React.ReactNode }> = ({
 
   const [libraryTracks, setLibraryTracks] = useState<AudioTrack[]>([]);
   const [userPlaylists, setUserPlaylists] = useState<Playlist[]>([]);
+  const [favoriteIds, setFavoriteIds] = useState<string[]>(() => loadFavorites());
+  const [lyricOffsets, setLyricOffsets] = useState<Record<string, number>>(() => loadLyricOffsets());
   const [artworkUrls, setArtworkUrls] = useState<Record<string, string>>({});
   const [settings, setSettings] = useState<AppSettings>(DEFAULT_SETTINGS);
   const [isSyncingAssets, setIsSyncingAssets] = useState(false);
+  const [syncProgress, setSyncProgress] = useState<{ current: number; total: number } | null>(null);
   const [lyricsRevision, setLyricsRevision] = useState(0);
+
+  const [hasCompletedTour, setHasCompletedTour] = useState<boolean>(() => loadHasCompletedTour());
+  const [isTourVisible, setIsTourVisible] = useState(false);
+
+  const [sleepTimer, setSleepTimer] = useState<SleepTimerState>({
+    endTimeMs: null,
+    untilTrackEnd: false,
+  });
+  const sleepTimerRef = useRef<SleepTimerState>(sleepTimer);
+  const sleepTimeoutRef = useRef<number | null>(null);
 
   const [queue, setQueue] = useState<AudioTrack[]>([]);
   const [baseQueue, setBaseQueue] = useState<AudioTrack[]>([]);
@@ -194,6 +236,15 @@ export const PlayerProvider: React.FC<{ children: React.ReactNode }> = ({
   const currentIndexRef = useRef(-1);
   const repeatModeRef = useRef<RepeatMode>('off');
   const currentTrackRef = useRef<AudioTrack | null>(null);
+  const hasCompletedTourRef = useRef(hasCompletedTour);
+
+  useEffect(() => {
+    sleepTimerRef.current = sleepTimer;
+  }, [sleepTimer]);
+
+  useEffect(() => {
+    hasCompletedTourRef.current = hasCompletedTour;
+  }, [hasCompletedTour]);
 
   useEffect(() => {
     queueRef.current = queue;
@@ -491,6 +542,11 @@ export const PlayerProvider: React.FC<{ children: React.ReactNode }> = ({
 
     if (audio.paused) {
       try {
+        const dur = Number.isFinite(audio.duration) ? audio.duration : 0;
+        if (audio.ended || (dur > 0 && audio.currentTime >= dur - 0.35)) {
+          audio.currentTime = 0;
+          setPositionMs(0);
+        }
         await audio.play();
       } catch (e) {
         console.warn('Erro ao retomar reprodução:', e);
@@ -499,6 +555,145 @@ export const PlayerProvider: React.FC<{ children: React.ReactNode }> = ({
       audio.pause();
     }
   }, [loadAndPlayAudioTrack]);
+
+  const playNextInQueue = useCallback(
+    async (track: AudioTrack) => {
+      if (!currentTrackRef.current || queueRef.current.length === 0) {
+        await playQueue([track], 0);
+        showToast(`Tocando "${track.name}"`, 'success');
+        return;
+      }
+      const nextQueue = [...queueRef.current];
+      const existingIdx = nextQueue.findIndex((t) => t.id === track.id);
+      let insertIdx = currentIndexRef.current + 1;
+      if (existingIdx !== -1 && existingIdx !== currentIndexRef.current) {
+        nextQueue.splice(existingIdx, 1);
+        if (existingIdx < currentIndexRef.current) {
+          insertIdx -= 1;
+        }
+      }
+      if (existingIdx === currentIndexRef.current) {
+        showToast(`"${track.name}" já está tocando.`, 'info');
+        return;
+      }
+      nextQueue.splice(insertIdx, 0, track);
+      setQueue(nextQueue);
+      queueRef.current = nextQueue;
+      showToast(`"${track.name}" tocará a seguir.`, 'success');
+    },
+    [playQueue, showToast]
+  );
+
+  const addToQueue = useCallback(
+    async (track: AudioTrack) => {
+      if (!currentTrackRef.current || queueRef.current.length === 0) {
+        await playQueue([track], 0);
+        showToast(`Tocando "${track.name}"`, 'success');
+        return;
+      }
+      const nextQueue = [...queueRef.current, track];
+      setQueue(nextQueue);
+      queueRef.current = nextQueue;
+      showToast(`"${track.name}" adicionada ao fim da fila.`, 'success');
+    },
+    [playQueue, showToast]
+  );
+
+  const isFavorite = useCallback(
+    (trackId: string) => favoriteIds.includes(trackId),
+    [favoriteIds]
+  );
+
+  const toggleFavorite = useCallback(
+    (trackId: string) => {
+      setFavoriteIds((prev) => {
+        const exists = prev.includes(trackId);
+        const next = exists ? prev.filter((id) => id !== trackId) : [trackId, ...prev];
+        saveFavorites(next);
+        showToast(
+          exists ? 'Removida das Favoritas.' : 'Adicionada às Favoritas!',
+          exists ? 'info' : 'success'
+        );
+        return next;
+      });
+    },
+    [showToast]
+  );
+
+  const getLyricOffset = useCallback(
+    (trackId: string) => lyricOffsets[trackId] ?? 0,
+    [lyricOffsets]
+  );
+
+  const adjustLyricOffset = useCallback(
+    (trackId: string, deltaMs: number) => {
+      setLyricOffsets((prev) => {
+        const nextVal = Math.max(-10000, Math.min(10000, (prev[trackId] ?? 0) + deltaMs));
+        const next = { ...prev, [trackId]: nextVal };
+        saveLyricOffsets(next);
+        return next;
+      });
+    },
+    []
+  );
+
+  const resetLyricOffset = useCallback((trackId: string) => {
+    setLyricOffsets((prev) => {
+      if (!(trackId in prev)) return prev;
+      const next = { ...prev };
+      delete next[trackId];
+      saveLyricOffsets(next);
+      return next;
+    });
+  }, []);
+
+  const cancelSleepTimer = useCallback(() => {
+    if (sleepTimeoutRef.current) {
+      window.clearTimeout(sleepTimeoutRef.current);
+      sleepTimeoutRef.current = null;
+    }
+    setSleepTimer({ endTimeMs: null, untilTrackEnd: false });
+  }, []);
+
+  const setSleepTimerMinutes = useCallback(
+    (minutes: number) => {
+      if (sleepTimeoutRef.current) {
+        window.clearTimeout(sleepTimeoutRef.current);
+      }
+      const delayMs = minutes * 60 * 1000;
+      const endTimeMs = Date.now() + delayMs;
+      setSleepTimer({ endTimeMs, untilTrackEnd: false });
+      sleepTimeoutRef.current = window.setTimeout(() => {
+        audioRef.current?.pause();
+        setIsPlaying(false);
+        setSleepTimer({ endTimeMs: null, untilTrackEnd: false });
+        sleepTimeoutRef.current = null;
+        showToast('Sleep Timer encerrado. Reprodução pausada.', 'info');
+      }, delayMs);
+      showToast(`Música será pausada em ${minutes} min.`, 'success');
+    },
+    [showToast]
+  );
+
+  const setSleepTimerEndOfTrack = useCallback(() => {
+    if (sleepTimeoutRef.current) {
+      window.clearTimeout(sleepTimeoutRef.current);
+      sleepTimeoutRef.current = null;
+    }
+    setSleepTimer({ endTimeMs: null, untilTrackEnd: true });
+    showToast('Vai pausar ao terminar a música atual.', 'success');
+  }, [showToast]);
+
+  const completeTour = useCallback(() => {
+    setIsTourVisible(false);
+    setHasCompletedTour(true);
+    hasCompletedTourRef.current = true;
+    saveHasCompletedTour(true);
+  }, []);
+
+  const replayTour = useCallback(() => {
+    setIsTourVisible(true);
+  }, []);
 
   const seekTo = useCallback((ms: number) => {
     const audio = audioRef.current;
@@ -581,6 +776,13 @@ export const PlayerProvider: React.FC<{ children: React.ReactNode }> = ({
       setDurationMs(dur);
     };
     const onEnded = async () => {
+      if (sleepTimerRef.current.untilTrackEnd) {
+        setIsPlaying(false);
+        setSleepTimer({ endTimeMs: null, untilTrackEnd: false });
+        showToast('Sleep Timer: pausado ao final da faixa.', 'info');
+        return;
+      }
+
       if (repeatModeRef.current === 'one') {
         audio.currentTime = 0;
         try {
@@ -743,7 +945,23 @@ export const PlayerProvider: React.FC<{ children: React.ReactNode }> = ({
         return;
       }
 
-      const folderCoverBlob: Blob | undefined = imageFiles[0];
+      const getDirKey = (file: File) => {
+        const rel = (file as File & { webkitRelativePath?: string }).webkitRelativePath;
+        if (!rel || !rel.includes('/')) return '';
+        const parts = rel.split('/');
+        parts.pop();
+        return parts.join('/').toLowerCase();
+      };
+
+      const coverByDir = new Map<string, Blob>();
+      for (const img of imageFiles) {
+        const dirKey = getDirKey(img);
+        if (!coverByDir.has(dirKey)) {
+          coverByDir.set(dirKey, img);
+        }
+      }
+      const fallbackCoverBlob: Blob | undefined = imageFiles[0];
+
       const lyricsTextByStem = new Map<string, string>();
       for (const lf of lyricFiles) {
         try {
@@ -776,12 +994,18 @@ export const PlayerProvider: React.FC<{ children: React.ReactNode }> = ({
         }
         existingKeys.add(dedupKey);
 
+        const rel = (file as File & { webkitRelativePath?: string }).webkitRelativePath;
+        const relParts = rel ? rel.split('/').filter(Boolean) : [];
+        const folderName =
+          relParts.length >= 2 ? relParts[relParts.length - 2] : undefined;
+
         const id = makeTrackId('local');
         const track: AudioTrack = {
           id,
           name: title,
           artist,
           album,
+          folderName,
           sourceType: 'local',
           addedAt: Date.now(),
           fileSize: file.size,
@@ -790,9 +1014,11 @@ export const PlayerProvider: React.FC<{ children: React.ReactNode }> = ({
 
         await putAudioBlob(id, file);
 
+        const dirKey = getDirKey(file);
+        const dirCover = coverByDir.get(dirKey) || (dirKey === '' ? fallbackCoverBlob : undefined);
         const coverBlob = settings.preferEmbeddedArtwork
-          ? meta.artworkBlob || folderCoverBlob
-          : folderCoverBlob || meta.artworkBlob;
+          ? meta.artworkBlob || dirCover
+          : dirCover || meta.artworkBlob;
 
         if (coverBlob) {
           await putArtworkBlob(id, coverBlob);
@@ -826,28 +1052,35 @@ export const PlayerProvider: React.FC<{ children: React.ReactNode }> = ({
         'success'
       );
 
-      await playQueue(merged, 0);
-      setPlayerModalVisible(true);
+      if (!hasCompletedTourRef.current) {
+        setIsTourVisible(true);
+      }
 
-      // Enrich missing covers & lyrics in background when online
+      // Enrich missing covers & lyrics in background batches when online
       if (navigator.onLine && (settings.autoFetchArtwork || settings.autoFetchLyrics)) {
         void (async () => {
-          for (const t of addedTracks) {
-            try {
-              const res = await resolveAndCacheTrackAssets(t, {
-                fetchArtwork: settings.autoFetchArtwork,
-                fetchLyrics: settings.autoFetchLyrics,
-                hdArtworkQuality: settings.hdArtworkQuality,
-              });
-              if (res.artworkBlob) {
-                cacheArtworkUrl(t.id, res.artworkBlob);
-              }
-              if (res.lyrics) {
-                setLyricsRevision((r) => r + 1);
-              }
-            } catch {
-              // Ignore individual lookup errors
-            }
+          const concurrency = 3;
+          for (let i = 0; i < addedTracks.length; i += concurrency) {
+            const batch = addedTracks.slice(i, i + concurrency);
+            await Promise.all(
+              batch.map(async (t) => {
+                try {
+                  const res = await resolveAndCacheTrackAssets(t, {
+                    fetchArtwork: settings.autoFetchArtwork,
+                    fetchLyrics: settings.autoFetchLyrics,
+                    hdArtworkQuality: settings.hdArtworkQuality,
+                  });
+                  if (res.artworkBlob) {
+                    cacheArtworkUrl(t.id, res.artworkBlob);
+                  }
+                  if (res.lyrics) {
+                    setLyricsRevision((r) => r + 1);
+                  }
+                } catch {
+                  // Ignore individual lookup errors
+                }
+              })
+            );
           }
         })();
       }
@@ -855,7 +1088,6 @@ export const PlayerProvider: React.FC<{ children: React.ReactNode }> = ({
     [
       cacheArtworkUrl,
       libraryTracks,
-      playQueue,
       settings.autoFetchArtwork,
       settings.autoFetchLyrics,
       settings.hdArtworkQuality,
@@ -1000,36 +1232,6 @@ export const PlayerProvider: React.FC<{ children: React.ReactNode }> = ({
     [showToast, userPlaylists]
   );
 
-  const updateTrackInfo = useCallback(
-    async (trackId: string, info: { name: string; artist: string; album?: string }) => {
-      const apply = (list: AudioTrack[]) =>
-        list.map((t) =>
-          t.id === trackId
-            ? {
-                ...t,
-                name: info.name.trim() || t.name,
-                artist: info.artist.trim() || 'Artista Desconhecido',
-                album: info.album?.trim() ?? t.album,
-              }
-            : t
-        );
-
-      const nextLibrary = apply(libraryTracks);
-      const updated = nextLibrary.find((t) => t.id === trackId);
-      if (updated) {
-        await putTrack(updated);
-      }
-      setLibraryTracks(nextLibrary);
-      setQueue((prev) => apply(prev));
-      setBaseQueue((prev) => apply(prev));
-      if (currentTrackRef.current?.id === trackId && updated) {
-        setCurrentTrack(updated);
-      }
-      showToast('Informações da faixa atualizadas!', 'success');
-    },
-    [libraryTracks, showToast]
-  );
-
   const updateTrackCover = useCallback(
     async (trackId: string, fileOrBlob: Blob) => {
       await putArtworkBlob(trackId, fileOrBlob);
@@ -1084,21 +1286,34 @@ export const PlayerProvider: React.FC<{ children: React.ReactNode }> = ({
       return;
     }
     setIsSyncingAssets(true);
+    setSyncProgress({ current: 0, total: libraryTracks.length });
     let updated = 0;
+    let done = 0;
     try {
-      for (const track of libraryTracks) {
-        const res = await resolveAndCacheTrackAssets(track, {
-          fetchArtwork: true,
-          fetchLyrics: settings.autoFetchLyrics,
-          hdArtworkQuality: settings.hdArtworkQuality,
-        });
-        if (res.artworkBlob) {
-          cacheArtworkUrl(track.id, res.artworkBlob);
-          updated++;
-        }
-        if (res.lyrics) {
-          updated++;
-        }
+      const concurrency = 3;
+      for (let i = 0; i < libraryTracks.length; i += concurrency) {
+        const batch = libraryTracks.slice(i, i + concurrency);
+        await Promise.all(
+          batch.map(async (track) => {
+            try {
+              const res = await resolveAndCacheTrackAssets(track, {
+                fetchArtwork: true,
+                fetchLyrics: settings.autoFetchLyrics,
+                hdArtworkQuality: settings.hdArtworkQuality,
+              });
+              if (res.artworkBlob) {
+                cacheArtworkUrl(track.id, res.artworkBlob);
+                updated++;
+              }
+              if (res.lyrics) {
+                updated++;
+              }
+            } finally {
+              done++;
+              setSyncProgress({ current: done, total: libraryTracks.length });
+            }
+          })
+        );
       }
       setLyricsRevision((r) => r + 1);
       showToast(
@@ -1111,6 +1326,7 @@ export const PlayerProvider: React.FC<{ children: React.ReactNode }> = ({
       showToast('Erro durante a sincronização.', 'error');
     } finally {
       setIsSyncingAssets(false);
+      setSyncProgress(null);
     }
   }, [
     cacheArtworkUrl,
@@ -1193,11 +1409,12 @@ export const PlayerProvider: React.FC<{ children: React.ReactNode }> = ({
 
   const clearCache = useCallback(async () => {
     await clearArtworkAndLyricsCache();
+    clearTranslatedLyricsCache();
     artworkUrlCacheRef.current.forEach((url) => URL.revokeObjectURL(url));
     artworkUrlCacheRef.current.clear();
     setArtworkUrls({});
     setLyricsRevision((r) => r + 1);
-    showToast('Cache de capas e letras limpo!', 'success');
+    showToast('Cache de capas, letras e traduções limpo!', 'success');
   }, [showToast]);
 
   const clearAllData = useCallback(async () => {
@@ -1211,8 +1428,11 @@ export const PlayerProvider: React.FC<{ children: React.ReactNode }> = ({
     artworkUrlCacheRef.current.clear();
 
     await clearEntireLibrary();
+    clearTranslatedLyricsCache();
     setLibraryTracks([]);
     setUserPlaylists([]);
+    setFavoriteIds([]);
+    saveFavorites([]);
     setArtworkUrls({});
     setQueue([]);
     setBaseQueue([]);
@@ -1222,8 +1442,9 @@ export const PlayerProvider: React.FC<{ children: React.ReactNode }> = ({
     setDurationMs(0);
     setIsPlaying(false);
     setPlayerModalVisible(false);
+    cancelSleepTimer();
     showToast('Biblioteca limpa.', 'info');
-  }, [showToast]);
+  }, [cancelSleepTimer, showToast]);
 
   const value = useMemo<PlayerContextValue>(
     () => ({
@@ -1246,11 +1467,20 @@ export const PlayerProvider: React.FC<{ children: React.ReactNode }> = ({
       setPlayerModalVisible,
       libraryTracks,
       userPlaylists,
+      favoriteIds,
       settings,
       isSyncingAssets,
+      syncProgress,
       lyricsRevision,
+      sleepTimer,
+      hasCompletedTour,
+      isTourVisible,
+      completeTour,
+      replayTour,
       playTrack,
       playQueue,
+      playNextInQueue,
+      addToQueue,
       jumpToQueueIndex,
       togglePlayPause,
       playNext,
@@ -1260,11 +1490,18 @@ export const PlayerProvider: React.FC<{ children: React.ReactNode }> = ({
       skipBackward,
       toggleShuffle,
       cycleRepeatMode,
+      isFavorite,
+      toggleFavorite,
+      getLyricOffset,
+      adjustLyricOffset,
+      resetLyricOffset,
+      setSleepTimerMinutes,
+      setSleepTimerEndOfTrack,
+      cancelSleepTimer,
       importLocalFiles,
       streamOnlineTrack,
       downloadOnlineTrack,
       removeTrack,
-      updateTrackInfo,
       updateTrackCover,
       updateTrackLyrics,
       getTrackArtworkUrl,
@@ -1278,11 +1515,16 @@ export const PlayerProvider: React.FC<{ children: React.ReactNode }> = ({
       clearCache,
       clearAllData,
       fetchTrendingTracks,
+      searchOnlineTracks,
     }),
     [
+      addToQueue,
       addTrackToPlaylist,
+      adjustLyricOffset,
+      cancelSleepTimer,
       clearAllData,
       clearCache,
+      completeTour,
       createPlaylist,
       currentIndex,
       currentTrack,
@@ -1290,20 +1532,26 @@ export const PlayerProvider: React.FC<{ children: React.ReactNode }> = ({
       deletePlaylist,
       downloadOnlineTrack,
       durationMs,
+      favoriteIds,
+      getLyricOffset,
       getTrackArtworkUrl,
+      hasCompletedTour,
       importLocalFiles,
       installPromptEvent,
       isBuffering,
+      isFavorite,
       isOnline,
       isPlayerModalVisible,
       isPlaying,
       isReady,
       isShuffle,
       isSyncingAssets,
+      isTourVisible,
       jumpToQueueIndex,
       libraryTracks,
       lyricsRevision,
       playNext,
+      playNextInQueue,
       playPrevious,
       playQueue,
       playTrack,
@@ -1313,20 +1561,26 @@ export const PlayerProvider: React.FC<{ children: React.ReactNode }> = ({
       removeTrack,
       removeTrackFromPlaylist,
       repeatMode,
+      replayTour,
+      resetLyricOffset,
       resolveLyricsForTrack,
       seekTo,
+      setSleepTimerEndOfTrack,
+      setSleepTimerMinutes,
       settings,
       showToast,
       skipBackward,
       skipForward,
+      sleepTimer,
       streamOnlineTrack,
       syncAllLibraryAssets,
+      syncProgress,
       toast,
+      toggleFavorite,
       togglePlayPause,
       toggleShuffle,
       updateSettings,
       updateTrackCover,
-      updateTrackInfo,
       updateTrackLyrics,
       userPlaylists,
     ]

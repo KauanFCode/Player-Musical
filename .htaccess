@@ -3,12 +3,13 @@ DirectoryIndex dist/index.html
 <IfModule mod_mime.c>
   AddType application/manifest+json .webmanifest
   AddType application/javascript .js .mjs
+  AddType application/vnd.android.package-archive .apk
 </IfModule>
 
 <IfModule mod_rewrite.c>
   RewriteEngine On
 
-  RewriteRule ^(\.git|\.github|src|scripts|node_modules)(/|$) - [F,L]
+  RewriteRule ^(\.git|\.github|src|scripts|node_modules|native-android)(/|$) - [F,L]
   RewriteRule ^(package\.json|package-lock\.json|tsconfig\.json|tsconfig\.tsbuildinfo|vite\.config\.ts|README\.md|\.gitignore)$ - [F,L]
 
   RewriteCond %{ENV:REDIRECT_STATUS} ^$

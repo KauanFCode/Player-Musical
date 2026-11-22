@@ -3,6 +3,7 @@ DirectoryIndex index.html
 <IfModule mod_mime.c>
   AddType application/manifest+json .webmanifest
   AddType application/javascript .js .mjs
+  AddType application/vnd.android.package-archive .apk
 </IfModule>
 
 <IfModule mod_headers.c>
