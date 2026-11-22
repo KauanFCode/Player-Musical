@@ -250,7 +250,7 @@ export const PlayerModal: React.FC = () => {
   };
 
   return (
-    <div className="modal-full" role="dialog" aria-label="Tocando Agora">
+    <div className="modal-full player-modal" role="dialog" aria-label="Tocando Agora">
       {artworkUrl && (
         <div
           className="player-ambient-bg"
@@ -558,7 +558,7 @@ export const PlayerModal: React.FC = () => {
         </div>
 
         {/* Bottom Controls */}
-        <div style={{ paddingTop: 10 }}>
+        <div className="player-controls-footer" style={{ paddingTop: 10 }}>
           <div className="player-title-row">
             <div style={{ flex: 1, minWidth: 0 }}>
               <div style={{ fontSize: 21, fontWeight: 800 }}>

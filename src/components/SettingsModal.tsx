@@ -73,7 +73,13 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   ];
 
   return (
-    <div className="modal-full" role="dialog" aria-label="Configurações">
+    <div className="sheet-modal-overlay" onClick={onClose}>
+      <div
+        className="modal-full sheet-modal"
+        role="dialog"
+        aria-label="Configurações"
+        onClick={(e) => e.stopPropagation()}
+      >
       <div className="modal-header">
         <button
           type="button"
@@ -391,6 +397,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
             Zerar Biblioteca Offline
           </button>
         )}
+      </div>
       </div>
     </div>
   );

@@ -1705,3 +1705,227 @@ button:disabled {
   padding: 9px 15px;
   border-radius: 9999px;
 }
+
+/* Desktop Sidebar Brand (hidden on mobile) */
+.sidebar-brand {
+  display: none;
+}
+
+.sheet-modal-overlay {
+  display: contents;
+}
+
+/* Tablet / Medium Screens */
+@media (min-width: 640px) {
+  .app-shell {
+    max-width: 760px;
+  }
+
+  .sheet-modal-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.72);
+    backdrop-filter: blur(6px);
+    -webkit-backdrop-filter: blur(6px);
+    z-index: 50;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 24px;
+  }
+
+  .sheet-modal {
+    position: relative;
+    inset: auto;
+    width: 100%;
+    max-width: 680px;
+    max-height: 86dvh;
+    border-radius: 22px;
+    border: 1px solid var(--border);
+    box-shadow: 0 24px 70px rgba(0, 0, 0, 0.78);
+  }
+
+  .sheet-modal .modal-header {
+    padding-top: 16px;
+  }
+
+  .tour-backdrop {
+    max-width: 100%;
+    justify-content: center;
+    align-items: center;
+  }
+
+  .tour-container {
+    max-width: 500px;
+  }
+
+  .tour-container.tour-top,
+  .tour-container.tour-bottom {
+    justify-content: center;
+    padding-top: 0;
+    padding-bottom: 0;
+  }
+}
+
+/* Desktop Layout (>= 900px) */
+@media (min-width: 900px) {
+  .app-shell {
+    max-width: 100%;
+    border-left: none;
+    border-right: none;
+    display: grid;
+    grid-template-columns: 240px minmax(0, 1fr);
+  }
+
+  .bottom-nav {
+    position: relative;
+    left: auto;
+    right: auto;
+    bottom: auto;
+    height: 100%;
+    width: 240px;
+    background: #0c0c10;
+    border-top: none;
+    border-right: 1px solid var(--border);
+    display: flex;
+    flex-direction: column;
+    align-items: stretch;
+    justify-content: flex-start;
+    padding: 20px 14px 104px;
+    gap: 6px;
+    order: -1;
+    z-index: 12;
+  }
+
+  .sidebar-brand {
+    display: flex;
+    align-items: center;
+    gap: 11px;
+    padding: 4px 8px 18px;
+    margin-bottom: 8px;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  }
+
+  .sidebar-brand-icon {
+    width: 36px;
+    height: 36px;
+    border-radius: 10px;
+    background: var(--primary);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+  }
+
+  .sidebar-brand-title {
+    font-size: 16px;
+    font-weight: 800;
+    color: var(--text);
+    line-height: 1.15;
+  }
+
+  .sidebar-brand-sub {
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--text-muted);
+  }
+
+  .nav-item {
+    flex-direction: row;
+    justify-content: flex-start;
+    gap: 12px;
+    padding: 11px 14px;
+    border-radius: 12px;
+    font-size: 14px;
+    transition: background 0.15s ease, color 0.15s ease;
+  }
+
+  .nav-item:hover {
+    background: rgba(255, 255, 255, 0.05);
+    color: var(--text);
+  }
+
+  .nav-item.active {
+    background: var(--primary-dim);
+    color: var(--primary);
+  }
+
+  .screen-scroll {
+    height: 100%;
+    padding: 28px max(36px, calc((100% - 1080px) / 2)) 112px;
+  }
+
+  .explore-search-bar,
+  .search-bar-wrap {
+    max-width: 540px;
+  }
+
+  .favorites-smart-card {
+    max-width: 540px;
+  }
+
+  .mini-player {
+    left: 0;
+    right: 0;
+    bottom: 0;
+    border-radius: 0;
+    border-left: none;
+    border-right: none;
+    border-bottom: none;
+    background: rgba(16, 16, 21, 0.96);
+    z-index: 25;
+  }
+
+  .mini-player-row {
+    padding: 11px 28px;
+  }
+
+  .mini-art,
+  .mini-art-placeholder {
+    width: 48px;
+    height: 48px;
+  }
+
+  .player-modal {
+    max-width: 100%;
+  }
+
+  .player-modal .modal-header {
+    padding: 16px 32px;
+  }
+
+  .player-modal .player-content {
+    max-width: 920px;
+    width: 100%;
+    margin: 0 auto;
+    padding: 10px 32px 28px;
+  }
+
+  .player-controls-footer {
+    max-width: 580px;
+    width: 100%;
+    margin: 0 auto;
+  }
+
+  .cover-stage {
+    width: min(36vh, 340px);
+  }
+
+  .lyrics-view-wrap {
+    max-width: 780px;
+    margin: 0 auto;
+  }
+
+  .lyrics-list-centered {
+    padding: 26% 0;
+  }
+}
+
+/* Wide Desktop 2-column Track Grid (>= 1080px) */
+@media (min-width: 1080px) {
+  .track-list {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 10px;
+  }
+}

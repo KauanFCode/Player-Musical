@@ -21,7 +21,13 @@ export const HelpModal: React.FC<HelpModalProps> = ({ visible, onClose }) => {
   if (!visible) return null;
 
   return (
-    <div className="modal-full" role="dialog" aria-label="Guia de Uso e Instalação">
+    <div className="sheet-modal-overlay" onClick={onClose}>
+      <div
+        className="modal-full sheet-modal"
+        role="dialog"
+        aria-label="Guia de Uso e Instalação"
+        onClick={(e) => e.stopPropagation()}
+      >
       <div className="modal-header">
         <button
           type="button"
@@ -147,6 +153,7 @@ export const HelpModal: React.FC<HelpModalProps> = ({ visible, onClose }) => {
             para tocar mesmo sem internet.
           </div>
         </div>
+      </div>
       </div>
     </div>
   );
