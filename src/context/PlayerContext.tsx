@@ -304,7 +304,7 @@ export const PlayerProvider: React.FC<{ children: React.ReactNode }> = ({
     };
     const handleAppInstalled = () => {
       setInstallPromptEvent(null);
-      showToast('Player 2.0 instalado com sucesso!', 'success');
+      showToast('Wavy instalado com sucesso!', 'success');
     };
 
     window.addEventListener('online', handleOnline);
@@ -843,7 +843,7 @@ export const PlayerProvider: React.FC<{ children: React.ReactNode }> = ({
       ms.metadata = new MediaMetadata({
         title: currentTrack.name,
         artist: currentTrack.artist || 'Artista Desconhecido',
-        album: currentTrack.album || 'Player 2.0',
+        album: currentTrack.album || 'Wavy',
         artwork: art ? [{ src: art }] : [],
       });
     }

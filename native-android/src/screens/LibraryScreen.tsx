@@ -125,7 +125,7 @@ export default function LibraryScreen() {
         /* First-launch clean onboarding view */
         <View style={styles.onboardingRoot}>
           <View style={styles.onboardingHeader}>
-            <Text style={styles.brandWordmark}>Player 2.0</Text>
+            <Text style={styles.brandWordmark}>Wavy</Text>
             <TouchableOpacity
               style={styles.headerIconBtn}
               onPress={() => setIsSettingsVisible(true)}

@@ -149,7 +149,7 @@ export const LibraryScreen: React.FC<LibraryScreenProps> = ({ onNavigateExplore 
         <header className="screen-header">
           <div className="screen-title-wrap">
             <h1 className="screen-title" style={{ fontSize: 22 }}>
-              Player 2.0
+              Wavy
             </h1>
             {!isOnline && (
               <span className="status-badge offline">

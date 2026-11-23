@@ -55,7 +55,7 @@ export const HelpModal: React.FC<HelpModalProps> = ({ visible, onClose }) => {
               Pronto para instalar no seu dispositivo!
             </div>
             <div className="setting-desc" style={{ marginBottom: 12, color: 'var(--text-secondary)' }}>
-              Instale o Player 2.0 na tela inicial para abrir em tela cheia e usar 100%
+              Instale o Wavy na tela inicial para abrir em tela cheia e usar 100%
               offline como um aplicativo nativo.
             </div>
             <button
@@ -116,16 +116,16 @@ export const HelpModal: React.FC<HelpModalProps> = ({ visible, onClose }) => {
           </div>
           <div className="setting-desc" style={{ lineHeight: 1.6, fontSize: 13, marginBottom: 12 }}>
             Prefere instalar direto como aplicativo Android nativo com leitura de pastas em segundo
-            plano? Baixe o APK oficial da versão <strong style={{ color: 'var(--primary)' }}>2.0.7</strong>:
+            plano? Baixe o APK oficial do <strong style={{ color: 'var(--primary)' }}>Wavy (v2.0.8)</strong>:
           </div>
           <a
-            href="./Player-v2.0.7.apk"
-            download="Player-v2.0.7.apk"
+            href="./Wavy-v2.0.8.apk"
+            download="Wavy-v2.0.8.apk"
             className="pill-primary-btn"
             style={{ width: '100%', textDecoration: 'none' }}
           >
             <Download size={16} />
-            Baixar APK Android (v2.0.7)
+            Baixar APK Android (v2.0.8)
           </a>
         </div>
 

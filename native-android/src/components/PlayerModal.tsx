@@ -31,6 +31,8 @@ import Animated, {
 import {
   AlignLeft,
   ChevronDown,
+  Eye,
+  EyeOff,
   Heart,
   Image as ImageIcon,
   Languages,
@@ -109,6 +111,7 @@ export const PlayerModal: React.FC = () => {
   const { positionMs, durationMs } = usePlaybackProgress();
 
   const [centerTab, setCenterTab] = useState<CenterTab>('cover');
+  const [isLyricsFocused, setIsLyricsFocused] = useState(false);
   const [centerHeight, setCenterHeight] = useState(0);
   const [isSeeking, setIsSeeking] = useState(false);
   const [seekValue, setSeekValue] = useState(0);
@@ -126,6 +129,13 @@ export const PlayerModal: React.FC = () => {
   const lineLayoutsRef = useRef<Record<number, { y: number; height: number }>>({});
   const lyricsViewportHeightRef = useRef(360);
   const [lyricsScrollHeight, setLyricsScrollHeight] = useState(340);
+
+  // Reset focus mode when leaving lyrics or closing modal
+  useEffect(() => {
+    if (centerTab !== 'lyrics' || !isPlayerModalVisible) {
+      setIsLyricsFocused(false);
+    }
+  }, [centerTab, isPlayerModalVisible]);
 
   // Pulse animation for cover art
   const coverScale = useSharedValue(1);
@@ -387,8 +397,18 @@ export const PlayerModal: React.FC = () => {
           </View>
 
           <View style={styles.headerCenter}>
-            <Text style={styles.headerLabel}>TOCANDO AGORA</Text>
-            {currentTrack?.album ? (
+            <Text style={styles.headerLabel}>
+              {isLyricsFocused && centerTab === 'lyrics' && currentTrack
+                ? currentTrack.name
+                : 'TOCANDO AGORA'}
+            </Text>
+            {isLyricsFocused && centerTab === 'lyrics' ? (
+              currentTrack?.artist ? (
+                <Text style={styles.headerAlbum} numberOfLines={1}>
+                  {currentTrack.artist}
+                </Text>
+              ) : null
+            ) : currentTrack?.album ? (
               <Text style={styles.headerAlbum} numberOfLines={1}>
                 {currentTrack.album}
               </Text>
@@ -396,6 +416,27 @@ export const PlayerModal: React.FC = () => {
           </View>
 
           <View style={styles.headerRight}>
+            {centerTab === 'lyrics' && (
+              <TouchableOpacity
+                style={[
+                  styles.headerPillBtn,
+                  isLyricsFocused && styles.headerPillBtnActive,
+                ]}
+                onPress={() => setIsLyricsFocused((prev) => !prev)}
+                accessibilityRole="button"
+                accessibilityLabel={
+                  isLyricsFocused
+                    ? 'Mostrar controles do player'
+                    : 'Esconder controles do player'
+                }
+              >
+                {isLyricsFocused ? (
+                  <Eye color={COLORS.black} size={18} />
+                ) : (
+                  <EyeOff color={COLORS.text} size={18} />
+                )}
+              </TouchableOpacity>
+            )}
             <TouchableOpacity
               style={[
                 styles.headerPillBtn,
@@ -500,6 +541,7 @@ export const PlayerModal: React.FC = () => {
               }}
             >
               {/* Quick Font, Sync Offset & Translate Toolbar */}
+              {!isLyricsFocused && (
               <View style={styles.lyricsToolbar}>
                 <View style={styles.lyricsToolGroup}>
                   <TouchableOpacity
@@ -599,6 +641,7 @@ export const PlayerModal: React.FC = () => {
                   )}
                 </TouchableOpacity>
               </View>
+              )}
 
               {isLoadingLyrics ? (
                 <View style={styles.centerFallback}>
@@ -742,6 +785,19 @@ export const PlayerModal: React.FC = () => {
         </View>
 
         {/* Bottom Controls */}
+        {centerTab === 'lyrics' && isLyricsFocused ? (
+          <View style={styles.lyricsFocusFooter}>
+            <TouchableOpacity
+              style={styles.lyricsRestoreBtn}
+              onPress={() => setIsLyricsFocused(false)}
+              accessibilityRole="button"
+              accessibilityLabel="Mostrar controles do player"
+            >
+              <Eye color={COLORS.primary} size={15} />
+              <Text style={styles.lyricsRestoreText}>Mostrar controles</Text>
+            </TouchableOpacity>
+          </View>
+        ) : (
         <View style={[styles.controlsArea, isCompactHeight && { paddingBottom: SPACING.sm, paddingTop: 4 }]}>
           <View style={styles.titleHeartRow}>
             <View style={styles.titleSpacer} />
@@ -857,6 +913,7 @@ export const PlayerModal: React.FC = () => {
             </TouchableOpacity>
           </View>
         </View>
+        )}
         </SafeAreaView>
 
         {/* Sleep Timer Picker Sheet */}
@@ -936,7 +993,7 @@ const styles = StyleSheet.create({
     paddingVertical: SPACING.sm,
   },
   headerLeft: {
-    width: 84,
+    minWidth: 46,
     alignItems: 'flex-start',
   },
   headerIconBtn: {
@@ -962,10 +1019,31 @@ const styles = StyleSheet.create({
     marginTop: 2,
   },
   headerRight: {
-    width: 84,
     flexDirection: 'row',
     justifyContent: 'flex-end',
+    alignItems: 'center',
     gap: 8,
+  },
+  lyricsFocusFooter: {
+    paddingVertical: SPACING.sm,
+    paddingHorizontal: SPACING.md,
+    alignItems: 'center',
+  },
+  lyricsRestoreBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 7,
+    backgroundColor: COLORS.surfaceElevated,
+    borderWidth: 1,
+    borderColor: COLORS.primaryBorder,
+    borderRadius: RADIUS.full,
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+  },
+  lyricsRestoreText: {
+    color: COLORS.primary,
+    fontSize: 12,
+    fontWeight: '700',
   },
   headerPillBtn: {
     width: 38,

@@ -47,7 +47,7 @@ export const HelpModal: React.FC<HelpModalProps> = ({ visible, onClose }) => {
               <Text style={styles.cardTitle}>Capas em Alta Definição</Text>
             </View>
             <Text style={styles.cardText}>
-              O Player 2.0 lê primeiro a capa embutida no MP3/FLAC ou o arquivo `cover.jpg` da pasta. Caso falte alguma capa ou letra, você pode usar a opção discreta{' '}
+              O Wavy lê primeiro a capa embutida no MP3/FLAC ou o arquivo `cover.jpg` da pasta. Caso falte alguma capa ou letra, você pode usar a opção discreta{' '}
               <Text style={styles.highlight}>Puxar capas e letras faltantes</Text> dentro de Configurações.
             </Text>
           </View>

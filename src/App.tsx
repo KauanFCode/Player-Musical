@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Compass, Disc3, Library, ListMusic } from 'lucide-react';
+import { Compass, Library, ListMusic } from 'lucide-react';
 import { PlayerProvider, usePlayer } from './context/PlayerContext';
 import { MiniPlayer } from './components/MiniPlayer';
 import { PlayerModal } from './components/PlayerModal';
@@ -32,11 +32,13 @@ const AppShell: React.FC = () => {
 
       <nav className="bottom-nav" aria-label="Navegação principal">
         <div className="sidebar-brand" aria-hidden="true">
-          <span className="sidebar-brand-icon">
-            <Disc3 size={20} color="#09090b" />
-          </span>
+          <img
+            src="./icons/icon-192.png"
+            alt="Wavy"
+            className="sidebar-brand-logo"
+          />
           <div>
-            <div className="sidebar-brand-title">Player 2.0</div>
+            <div className="sidebar-brand-title">Wavy</div>
             <div className="sidebar-brand-sub">PWA Offline</div>
           </div>
         </div>

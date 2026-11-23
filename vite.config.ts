@@ -12,9 +12,9 @@ export default defineConfig({
       registerType: 'autoUpdate',
       manifest: {
         id: base,
-        name: 'Player 2.0',
-        short_name: 'Player 2.0',
-        description: 'Player de música 100% offline instalável pelo navegador',
+        name: 'Wavy',
+        short_name: 'Wavy',
+        description: 'Wavy — Player de música 100% offline instalável pelo navegador',
         start_url: base,
         scope: base,
         display: 'standalone',

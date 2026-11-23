@@ -2,6 +2,8 @@ import React, { useEffect, useRef, useState } from 'react';
 import {
   AlignLeft,
   ChevronDown,
+  Eye,
+  EyeOff,
   Heart,
   Image as ImageIcon,
   Languages,
@@ -70,6 +72,7 @@ export const PlayerModal: React.FC = () => {
   } = usePlayer();
 
   const [centerTab, setCenterTab] = useState<CenterTab>('cover');
+  const [isLyricsFocused, setIsLyricsFocused] = useState(false);
   const [isSeeking, setIsSeeking] = useState(false);
   const [seekValue, setSeekValue] = useState(0);
   const [isSleepModalVisible, setIsSleepModalVisible] = useState(false);
@@ -155,6 +158,13 @@ export const PlayerModal: React.FC = () => {
       }
     }
   }, [positionMs, currentLyricOffset, parsedLyrics, isSeeking, activeLyricIdx, centerTab]);
+
+  // Reset focus mode when leaving lyrics or closing modal
+  useEffect(() => {
+    if (centerTab !== 'lyrics' || !isPlayerModalVisible) {
+      setIsLyricsFocused(false);
+    }
+  }, [centerTab, isPlayerModalVisible]);
 
   // Center active line when entering Lyrics view or toggling translation
   useEffect(() => {
@@ -291,11 +301,16 @@ export const PlayerModal: React.FC = () => {
               fontWeight: 700,
               letterSpacing: '0.12em',
               color: 'var(--text-secondary)',
+              whiteSpace: 'nowrap',
+              overflow: 'hidden',
+              textOverflow: 'ellipsis',
             }}
           >
-            TOCANDO AGORA
+            {isLyricsFocused && centerTab === 'lyrics'
+              ? currentTrack.name
+              : 'TOCANDO AGORA'}
           </div>
-          {(currentTrack.album || currentTrack.folderName) && (
+          {isLyricsFocused && centerTab === 'lyrics' ? (
             <div
               style={{
                 fontSize: 12,
@@ -305,12 +320,45 @@ export const PlayerModal: React.FC = () => {
                 textOverflow: 'ellipsis',
               }}
             >
-              {currentTrack.album || currentTrack.folderName}
+              {currentTrack.artist}
             </div>
+          ) : (
+            (currentTrack.album || currentTrack.folderName) && (
+              <div
+                style={{
+                  fontSize: 12,
+                  color: 'var(--text-muted)',
+                  whiteSpace: 'nowrap',
+                  overflow: 'hidden',
+                  textOverflow: 'ellipsis',
+                }}
+              >
+                {currentTrack.album || currentTrack.folderName}
+              </div>
+            )
           )}
         </div>
 
         <div style={{ display: 'flex', gap: 6 }}>
+          {centerTab === 'lyrics' && (
+            <button
+              type="button"
+              className={`icon-btn ${isLyricsFocused ? 'active' : ''}`}
+              aria-label={
+                isLyricsFocused
+                  ? 'Mostrar controles do player'
+                  : 'Esconder controles do player'
+              }
+              title={
+                isLyricsFocused
+                  ? 'Mostrar controles do player'
+                  : 'Esconder controles do player'
+              }
+              onClick={() => setIsLyricsFocused((prev) => !prev)}
+            >
+              {isLyricsFocused ? <Eye size={19} /> : <EyeOff size={19} />}
+            </button>
+          )}
           <button
             type="button"
             className={`icon-btn ${centerTab === 'queue' ? 'active' : ''}`}
@@ -382,6 +430,7 @@ export const PlayerModal: React.FC = () => {
 
           {centerTab === 'lyrics' && (
             <div className="lyrics-view-wrap">
+              {!isLyricsFocused && (
               <div className="lyrics-toolbar">
                 <div className="lyrics-tool-group">
                   <button
@@ -447,6 +496,7 @@ export const PlayerModal: React.FC = () => {
                   )}
                 </button>
               </div>
+              )}
 
               <div className="lyrics-container lyrics-centered-container">
                 {isLoadingLyrics ? (
@@ -558,6 +608,18 @@ export const PlayerModal: React.FC = () => {
         </div>
 
         {/* Bottom Controls */}
+        {centerTab === 'lyrics' && isLyricsFocused ? (
+          <div className="lyrics-focus-footer">
+            <button
+              type="button"
+              className="lyrics-restore-btn"
+              onClick={() => setIsLyricsFocused(false)}
+            >
+              <Eye size={15} />
+              <span>Mostrar controles</span>
+            </button>
+          </div>
+        ) : (
         <div className="player-controls-footer" style={{ paddingTop: 10 }}>
           <div className="player-title-row">
             <div style={{ flex: 1, minWidth: 0 }}>
@@ -696,6 +758,7 @@ export const PlayerModal: React.FC = () => {
             </button>
           </div>
         </div>
+        )}
       </div>
 
       {/* Sleep Timer Sheet */}
